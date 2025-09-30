@@ -5,18 +5,34 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, TrendingDown, Users, FileText, ChartBar as BarChart3, MessageSquare, ArrowRight, Calendar, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, FileText, ChartBar as BarChart3, MessageSquare, ArrowRight, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 export function DashboardView() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [sourceTitles, setSourceTitles] = useState([]);
+  const [selectedSource, setSelectedSource] = useState('');
 
   useEffect(() => {
-    // Simulate data loading
+    // Simulate initial loading
     const timer = setTimeout(() => setIsLoading(false), 1500);
     return () => clearTimeout(timer);
+  }, []);
+
+  // ✅ Fetch list of sources from FastAPI
+  useEffect(() => {
+    async function fetchSources() {
+      try {
+        const res = await fetch('http://localhost:8000/sources');
+        const data = await res.json();
+        setSourceTitles(data.available_source_titles || []);
+      } catch (error) {
+        console.error('Failed to fetch source titles:', error);
+      }
+    }
+    fetchSources();
   }, []);
 
   if (isLoading) {
@@ -56,6 +72,27 @@ export function DashboardView() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* ✅ Dropdown filter */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-gray-800">Dashboard Overview</h2>
+        <div className="flex items-center space-x-2">
+          <label htmlFor="source-select" className="text-sm text-gray-600">Filter by Source:</label>
+          <select
+            id="source-select"
+            className="px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={selectedSource}
+            onChange={(e) => setSelectedSource(e.target.value)}
+          >
+            <option value="">All Sources</option>
+            {sourceTitles.map((title, idx) => (
+              <option key={idx} value={title}>
+                {title}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Card className="border-l-4 border-l-blue-500">

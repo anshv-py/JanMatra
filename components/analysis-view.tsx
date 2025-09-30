@@ -9,63 +9,65 @@ import { Calendar, TrendingUp, TrendingDown, BarChart3, PieChart, RefreshCw, Dow
 import { format } from 'date-fns';
 
 export function AnalysisView() {
-  const [selectedDateRange, setSelectedDateRange] = useState<Date>();
-  const [selectedTopic, setSelectedTopic] = useState('all');
-  const [selectedSentiment, setSelectedSentiment] = useState('all');
-  const [summary, setSummary] = useState('');
+  const [sourceTitles, setSourceTitles] = useState([]);
+  const [selectedSource, setSelectedSource] = useState('');
   const [sentimentData, setSentimentData] = useState([]);
+  const [summary, setSummary] = useState('');
   const [wordcloudImage, setWordcloudImage] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [sourceTitle, setSourceTitle] = useState('');
   const [totalComments, setTotalComments] = useState(0);
   const [individualResults, setIndividualResults] = useState([]);
 
-  // Sample document structure (you provided)
-  const sampleData = {
-    "_id": "68d66457202c8553f41b6855",
-    "SourceTitle": "Suggestions Invited for Regulations for Fast Track Insolvency Resolution...",
-    "sentiment_analysis": {
-      "counts": { "Positive": 7, "Negative": 5, "Neutral": 4, "Suggestive": 3 },
-      "percentages": { "Positive": 36.8, "Negative": 26.3, "Neutral": 21.1, "Suggestive": 15.8 },
-      "average_confidence": 0.8245,
-      "total_comments": 19
-    },
-    "individual_results": [],
-    "summary": "This comprehensive summary synthesizes a diverse range of public feedback regarding fast track insolvency resolution regulations. The responses indicate strong support for streamlined procedures while emphasizing the need for adequate safeguards to protect stakeholder interests. Key themes include implementation timelines, regulatory clarity, and balance between efficiency and due process.",
-    "wordcloud_base64": "iVBORw0KGgoAAAANSUhEUgAAAyAAAAGQCAIAAADZR5NjAAEAAElEQVR4nOyddZwkV7XHzy..."
+  // ✅ Fetch available source titles for dropdown
+  const fetchSourceTitles = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/sources');
+      const data = await res.json();
+      setSourceTitles(data.available_source_titles || []);
+      // Auto-select the first source initially
+      if (data.available_source_titles?.length > 0) {
+        setSelectedSource(data.available_source_titles[0]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sources:', err);
+    }
   };
 
-  // Simulate API call - replace with your actual API endpoint
-  const fetchAnalysisData = async () => {
+  // ✅ Fetch analysis data for a specific source
+  const fetchAnalysisData = async (title) => {
+    if (!title) return;
     setLoading(true);
     try {
-      const source_title = sampleData.SourceTitle;
-      const response = await fetch(`http://localhost:8000/records/${encodeURIComponent(source_title)}`);
+      const response = await fetch(`http://localhost:8000/records/${encodeURIComponent(title)}`);
       const result = await response.json();
-      
-      // Extract the first record from the API response
-      const data = result.records && result.records.length > 0 ? result.records[0] : sampleData;
-      
+
+      const data = result.records && result.records.length > 0 ? result.records[0] : null;
+      if (!data) {
+        setError('No records found for this source');
+        setLoading(false);
+        return;
+      }
+
       // Process sentiment data
-      const processedSentimentData = Object.entries(data.sentiment_analysis.percentages).map(([category, percentage]) => ({
-        category: category,
-        value: percentage,
-        count: data.sentiment_analysis.counts[category],
-        color: getSentimentColor(category)
-      }));
+      const processedSentimentData = Object.entries(data.sentiment_analysis.percentages).map(
+        ([category, percentage]) => ({
+          category,
+          value: percentage,
+          count: data.sentiment_analysis.counts[category],
+          color: getSentimentColor(category),
+        })
+      );
 
       setSentimentData(processedSentimentData);
       setSummary(data.summary);
       setSourceTitle(data.SourceTitle);
       setTotalComments(data.sentiment_analysis.total_comments);
       setIndividualResults(data.individual_results);
-      
-      // Decode base64 wordcloud
       if (data.wordcloud_base64) {
         setWordcloudImage(`data:image/png;base64,${data.wordcloud_base64}`);
       }
-      
       setError('');
     } catch (err) {
       setError('Failed to load analysis data');
@@ -92,25 +94,24 @@ export function AnalysisView() {
 
   const getOverallSentiment = () => {
     if (!sentimentData.length) return 'Unknown';
-    const maxSentiment = sentimentData.reduce((max, current) => 
+    const maxSentiment = sentimentData.reduce((max, current) =>
       current.value > max.value ? current : max
     );
     return maxSentiment.category;
   };
 
   const getOverallTrend = () => {
-    const positivePercentage = sentimentData.find(s => s.category === 'Positive')?.value || 0;
-    const negativePercentage = sentimentData.find(s => s.category === 'Negative')?.value || 0;
+    const positivePercentage = sentimentData.find((s) => s.category === 'Positive')?.value || 0;
+    const negativePercentage = sentimentData.find((s) => s.category === 'Negative')?.value || 0;
     return positivePercentage > negativePercentage ? 'Positive' : 'Negative';
   };
 
-  // PDF download handler for summary
   const handleDownloadSummaryPDF = () => {
     if (!summary) return;
-    
-    // Create a simple text file download since jsPDF isn't available
     const element = document.createElement('a');
-    const file = new Blob([`Analysis Summary - ${sourceTitle}\n\n${summary}`], {type: 'text/plain'});
+    const file = new Blob([`Analysis Summary - ${sourceTitle}\n\n${summary}`], {
+      type: 'text/plain',
+    });
     element.href = URL.createObjectURL(file);
     element.download = 'analysis-summary.txt';
     document.body.appendChild(element);
@@ -119,8 +120,14 @@ export function AnalysisView() {
   };
 
   useEffect(() => {
-    fetchAnalysisData();
+    fetchSourceTitles();
   }, []);
+
+  useEffect(() => {
+    if (selectedSource) {
+      fetchAnalysisData(selectedSource);
+    }
+  }, [selectedSource]);
 
   if (loading) {
     return (
@@ -142,7 +149,7 @@ export function AnalysisView() {
           <div className="text-center">
             <AlertCircle className="h-8 w-8 mx-auto mb-4 text-red-600" />
             <p className="text-red-600">{error}</p>
-            <Button onClick={fetchAnalysisData} className="mt-4">
+            <Button onClick={() => fetchAnalysisData(selectedSource)} className="mt-4">
               <RefreshCw className="mr-2 h-4 w-4" />
               Retry
             </Button>
@@ -154,15 +161,28 @@ export function AnalysisView() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
+      {/* ✅ Dropdown to select source */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Analysis</h1>
-          <p className="text-gray-600">Analysis for: {sourceTitle}</p>
-          <p className="text-sm text-gray-500">Total Comments Analyzed: {totalComments}</p>
+          <div className="mt-2 flex items-center gap-2">
+            <select
+              id="source"
+              className="border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+            >
+              {sourceTitles.map((title, idx) => (
+                <option key={idx} value={title}>
+                  {title}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-sm text-gray-500 mt-2">Total Comments Analyzed: {totalComments}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchAnalysisData}>
+          <Button variant="outline" onClick={() => fetchAnalysisData(selectedSource)}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh Data
           </Button>

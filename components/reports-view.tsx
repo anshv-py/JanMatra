@@ -232,15 +232,13 @@ export default function ReportsView() {
     }
   };
 
-  // Handle report selection
   const handleReportClick = (report: Report) => {
     setSelectedReportId(report.id);
     setSelectedReport(report);
-    setAiSuggestions([]); // Clear previous suggestions
+    setAiSuggestions([]);
     fetchAISuggestions(report.summary);
   };
 
-  // Get sentiment color
   const getSentimentColor = (sentiment: string) => {
     switch (sentiment.toLowerCase()) {
       case 'positive': return '#27AE60';
@@ -251,7 +249,6 @@ export default function ReportsView() {
     }
   };
 
-  // Retry connection
   const retryConnection = async () => {
     setError('');
     setLoading(true);
@@ -259,7 +256,6 @@ export default function ReportsView() {
     setLoading(false);
   };
 
-  // --- Effects ---
   useEffect(() => {
     fetchSourceTitles();
   }, []);
@@ -270,7 +266,6 @@ export default function ReportsView() {
     }
   }, [sourceTitles]);
 
-  // --- UI Rendering ---
   if (loading) {
     return (
       <div className="p-6 space-y-6">
