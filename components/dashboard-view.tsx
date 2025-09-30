@@ -14,6 +14,58 @@ export function DashboardView() {
   const [isLoading, setIsLoading] = useState(true);
   const [sourceTitles, setSourceTitles] = useState([]);
   const [selectedSource, setSelectedSource] = useState('');
+  const [sentimentData, setSentimentData] = useState<any[]>([]);
+  const [totalComments, setTotalComments] = useState(0);
+  const [loadingSentiment, setLoadingSentiment] = useState(true);
+  const [wordcloudImage, setWordcloudImage] = useState('');
+  const [loadingWordcloud, setLoadingWordcloud] = useState(false);
+
+
+  const getSentimentColor = (category: string) => {
+  switch (category.toLowerCase()) {
+    case 'positive': return 'bg-green-500';
+    case 'neutral': return 'bg-yellow-500';
+    case 'negative': return 'bg-red-500';
+    case 'suggestive': return 'bg-blue-500';
+    default: return 'bg-gray-500';
+  }
+};
+
+const fetchSentimentData = async (source: string) => {
+  setLoadingSentiment(true);
+  try {
+    const url = source 
+      ? `http://localhost:8000/records/${encodeURIComponent(source)}`
+      : `http://localhost:8000/records/all`; // adjust if your API differs
+    const res = await fetch(url);
+    const data = await res.json();
+
+    const record = data.records?.[0] || {
+      sentiment_analysis: {
+        counts: { Positive: 0, Neutral: 0, Negative: 0, Suggestive: 0 },
+        percentages: { Positive: 0, Neutral: 0, Negative: 0, Suggestive: 0 },
+        total_comments: 0
+      }
+    };
+
+    const processedData = Object.entries(record.sentiment_analysis.percentages).map(
+      ([category, value]) => ({
+        category,
+        value: Number(value),
+        count: record.sentiment_analysis.counts[category],
+        color: getSentimentColor(category)
+      })
+    );
+
+    setSentimentData(processedData);
+    setTotalComments(record.sentiment_analysis.total_comments);
+  } catch (err) {
+    console.error('Failed to fetch sentiment data:', err);
+  } finally {
+    setLoadingSentiment(false);
+  }
+};
+
 
   useEffect(() => {
     // Simulate initial loading
@@ -34,6 +86,45 @@ export function DashboardView() {
     }
     fetchSources();
   }, []);
+
+  useEffect(() => {
+  fetchSentimentData(selectedSource);
+}, [selectedSource]);
+
+
+
+  useEffect(() => {
+  if (sourceTitles.length > 0 && !selectedSource) {
+    setSelectedSource(sourceTitles[0]);
+  }
+}, [sourceTitles]);
+
+  useEffect(() => {
+  async function fetchWordcloud(source: string) {
+    if (!source) return;
+    setLoadingWordcloud(true);
+    try {
+      const res = await fetch(`http://localhost:8000/records/${encodeURIComponent(source)}`);
+      const data = await res.json();
+      const record = data.records && data.records.length > 0 ? data.records[0] : null;
+      if (record?.wordcloud_base64) {
+        setWordcloudImage(`data:image/png;base64,${record.wordcloud_base64}`);
+      } else {
+        setWordcloudImage('');
+      }
+    } catch (err) {
+      console.error('Failed to fetch wordcloud:', err);
+      setWordcloudImage('');
+    } finally {
+      setLoadingWordcloud(false);
+    }
+  }
+
+  if (selectedSource) {
+    fetchWordcloud(selectedSource);
+  }
+}, [selectedSource]);
+
 
   if (isLoading) {
     return (
@@ -74,16 +165,14 @@ export function DashboardView() {
     <div className="p-6 space-y-6">
       {/* ✅ Dropdown filter */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-gray-800">Dashboard Overview</h2>
-        <div className="flex items-center space-x-2">
-          <label htmlFor="source-select" className="text-sm text-gray-600">Filter by Source:</label>
+        {/*<h2 className="text-lg font-semibold text-gray-800">Dashboard Overview</h2> */}
+        <div className="flex items-center justify-start mb-4">
           <select
             id="source-select"
             className="px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={selectedSource}
             onChange={(e) => setSelectedSource(e.target.value)}
           >
-            <option value="">All Sources</option>
             {sourceTitles.map((title, idx) => (
               <option key={idx} value={title}>
                 {title}
@@ -92,68 +181,8 @@ export function DashboardView() {
           </select>
         </div>
       </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="border-l-4 border-l-blue-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Total Feedback
-            </CardTitle>
-            <MessageSquare className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">2,847</div>
-            <div className="flex items-center mt-2">
-              <TrendingUp className="h-3 w-3 text-green-500 mr-1" />
-              <span className="text-xs text-green-600">+12.5% from last week</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Positive Sentiment
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">67.3%</div>
-            <Progress value={67.3} className="mt-2" />
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-red-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Negative Sentiment
-            </CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">9.7%</div>
-            <Progress value={9.7} className="mt-2" />
-          </CardContent>
-        </Card>
-
-        <Card className="border-l-4 border-l-purple-500">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">
-              Active Regulations
-            </CardTitle>
-            <FileText className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">24</div>
-            <div className="flex items-center mt-2">
-              <Badge variant="secondary" className="text-xs">3 pending review</Badge>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6"> 
+      
         {/* Sentiment Analysis Chart */}
         <Card>
           <CardHeader>
@@ -167,45 +196,35 @@ export function DashboardView() {
               Public sentiment distribution across all active regulations
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span className="text-sm font-medium">Positive</span>
-                </div>
-                <span className="text-sm font-bold">67.3%</span>
+            <CardContent>
+            {loadingSentiment ? (
+              <Skeleton className="h-64 w-full" />
+            ) : (
+              <div className="space-y-4">
+                {sentimentData.map((item, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-3 h-3 rounded-full ${item.color}`}></div>
+                        <span className="text-sm font-medium">{item.category}</span>
+                      </div>
+                      <span className="text-sm font-bold">{item.value}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className={`h-2 rounded-full ${item.color}`}
+                        style={{ width: `${item.value}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <p className="text-xs text-gray-500 mt-1">
+                  Total Comments Analyzed: {totalComments}
+                </p>
               </div>
-              <Progress value={57.3} className="bg-green-100" />
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                  <span className="text-sm font-medium">Neutral</span>
-                </div>
-                <span className="text-sm font-bold">18.0%</span>
-              </div>
-              <Progress value={18} className="bg-yellow-100" />
-              
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                  <span className="text-sm font-medium">Negative</span>
-                </div>
-                <span className="text-sm font-bold">9.7%</span>
-              </div>
-              <Progress value={9.7} className="bg-red-100" />
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-blue-100 rounded-full"></div>
-                  <span className="text-sm font-medium">Suggestive</span>
-                </div>
-                <span className="text-sm font-bold">15.0%</span>
-              </div>
-              <Progress value={15} className="bg-blue-100" />
-            </div>
+            )}
           </CardContent>
+
         </Card>
 
         {/* Word Cloud Placeholder */}
@@ -218,26 +237,24 @@ export function DashboardView() {
           </CardHeader>
           <CardContent>
             <div className="bg-gradient-to-br from-blue-50 to-purple-50 rounded-lg p-6 h-64 flex items-center justify-center">
-              <div className="text-center space-y-4">
-                <div className="flex flex-wrap justify-center gap-2">
-                  {[
-                    { text: 'Healthcare', size: 'text-2xl', color: 'text-blue-600' },
-                    { text: 'Education', size: 'text-xl', color: 'text-green-600' },
-                    { text: 'Infrastructure', size: 'text-lg', color: 'text-purple-600' },
-                    { text: 'Environment', size: 'text-xl', color: 'text-teal-600' },
-                    { text: 'Safety', size: 'text-lg', color: 'text-red-600' },
-                    { text: 'Economy', size: 'text-2xl', color: 'text-orange-600' }
-                  ].map((word, index) => (
-                    <span key={index} className={`${word.size} ${word.color} font-semibold`}>
-                      {word.text}
-                    </span>
-                  ))}
+              {loadingWordcloud ? (
+                <Skeleton className="h-48 w-full" />
+              ) : wordcloudImage ? (
+                <img 
+                  src={wordcloudImage} 
+                  alt="Word Cloud" 
+                  className="max-w-full max-h-full object-contain rounded"
+                />
+              ) : (
+                <div className="text-center text-gray-500">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Word cloud not available</p>
                 </div>
-                <p className="text-sm text-gray-500">Interactive word cloud visualization</p>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Recent Activity */}
