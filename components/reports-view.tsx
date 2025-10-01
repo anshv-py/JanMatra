@@ -155,48 +155,64 @@ export default function ReportsView() {
   };
 
   // Fetch AI suggestions for a selected report
-  const fetchAISuggestions = async (summary: string) => {
-    if (!summary || summary.trim() === '' || summary === 'No summary available') {
-      setAiSuggestions(['No summary available to generate suggestions']);
-      return;
-    }
+  // Replace the fetchAISuggestions function in reports-view.tsx with this:
 
-    setLoadingAISuggestions(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/suggestions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: summary,
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const text = await response.text();
-      
-      // Parse the suggestions from the response
-      const lines = text
-        .split(/\n+/)
-        .map(l => l.replace(/^\d+\.\s*/, '').trim())
-        .filter(line => line.length > 0 && !line.toLowerCase().includes('suggestions:'))
-        .slice(0, 4);
-      
-      if (lines.length === 0) {
-        setAiSuggestions(['No actionable suggestions could be generated from this summary']);
-      } else {
-        setAiSuggestions(lines);
-      }
-    } catch (err) {
-      console.error('Error fetching AI suggestions:', err);
-      setAiSuggestions(['Failed to generate suggestions. Please try again later.']);
-    } finally {
-      setLoadingAISuggestions(false);
-    }
-  };
+const fetchAISuggestions = async (summary: string) => {
+  if (!summary || summary.trim() === '' || summary === 'No summary available') {
+    setAiSuggestions(['No summary available to generate suggestions']);
+    return;
+  }
 
+  setLoadingAISuggestions(true);
+  try {
+    const response = await fetch(`${API_BASE_URL}/suggestions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ summary: summary }),
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const text = await response.text();
+    
+    // Parse the suggestions from the response
+    // Split by numbered items (1., 2., 3., 4.) or by double newlines
+    const lines = text
+      .split(/(?:\r?\n){2,}|\d+\.\s+\*\*/)
+      .map(l => {
+        // Remove leading numbers, asterisks, and extra whitespace
+        return l
+          .replace(/^\d+\.\s*/, '')
+          .replace(/\*\*/g, '')
+          .replace(/\\n/g, ' ')
+          .replace(/\n/g, ' ')
+          .trim();
+      })
+      .filter(line => {
+        // Filter out empty lines and header text
+        return line.length > 20 && 
+               !line.toLowerCase().includes('here are') &&
+               !line.toLowerCase().includes('suggestions:') &&
+               !line.toLowerCase().includes('based on');
+      })
+      .slice(0, 4);
+    
+    if (lines.length === 0) {
+      setAiSuggestions(['No actionable suggestions could be generated from this summary']);
+    } else {
+      setAiSuggestions(lines);
+    }
+  } catch (err) {
+    console.error('Error fetching AI suggestions:', err);
+    setAiSuggestions(['Failed to generate suggestions. Please try again later.']);
+  } finally {
+    setLoadingAISuggestions(false);
+  }
+};
   // Get dominant sentiment
   const getDominantSentiment = (percentages: any) => {
     if (!percentages) return 'neutral';
