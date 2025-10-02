@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { TrendingUp, TrendingDown, Users, FileText, ChartBar as BarChart3, MessageSquare, ArrowRight, Clock } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, FileText, BarChart3, MessageSquare, ArrowRight, Clock } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer } from 'recharts';
@@ -18,7 +18,6 @@ export function DashboardView() {
   const [loadingSentiment, setLoadingSentiment] = useState(true);
   const [topComments, setTopComments] = useState<string[]>([]);
 
-  // Define colors matching sentiment categories in order: Positive, Neutral, Negative, Suggestive
   const SENTIMENT_COLORS: { [key: string]: string } = {
     'Positive': '#22c55e',
     'Neutral': '#facc15',
@@ -26,7 +25,6 @@ export function DashboardView() {
     'Suggestive': '#3b82f6'
   };
 
-  // Fetch global sentiment data and top comments
   const fetchGlobalSentimentData = async () => {
     setLoadingSentiment(true);
     try {
@@ -35,12 +33,10 @@ export function DashboardView() {
       const sourcesData = await sourcesRes.json();
       const titles: string[] = sourcesData.available_source_titles || [];
 
-      // Initialize counters
       let aggregatedCounts = { Positive: 0, Neutral: 0, Negative: 0, Suggestive: 0 };
       let total = 0;
       let allComments: Array<{ comment: string; confidence: number }> = [];
 
-      // Fetch records for each source and aggregate
       for (const title of titles) {
         const recordsRes = await fetch(`http://localhost:8000/records/${encodeURIComponent(title)}`);
         if (!recordsRes.ok) continue;
@@ -48,21 +44,17 @@ export function DashboardView() {
 
         const records = data.records || [];
         for (const record of records) {
-          // Process individual_results array
           const individualResults = record?.individual_results || [];
           
           for (const result of individualResults) {
-            // Count sentiment
             if (result?.sentiment) {
               const sentiment = result.sentiment;
-              // Map sentiment to our categories
               if (aggregatedCounts[sentiment as keyof typeof aggregatedCounts] !== undefined) {
                 aggregatedCounts[sentiment as keyof typeof aggregatedCounts] += 1;
                 total += 1;
               }
             }
             
-            // Collect comments with confidence scores
             if (result?.comment && typeof result.comment === 'string' && result?.confidence) {
               allComments.push({
                 comment: result.comment,
@@ -81,7 +73,6 @@ export function DashboardView() {
       setSentimentData(processedData);
       setTotalComments(total);
       
-      // Sort by confidence score (descending) and remove duplicates
       const sortedComments = allComments
         .sort((a, b) => b.confidence - a.confidence)
         .map(item => item.comment);
@@ -159,6 +150,7 @@ export function DashboardView() {
     <div className="p-6 space-y-6">
       {/* Sentiment Analysis and User Voices */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Sentiment Analysis Chart */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
@@ -216,6 +208,7 @@ export function DashboardView() {
           </CardContent>
         </Card>
 
+        {/* User Voices */}
         <Card>
           <CardHeader>
             <CardTitle>User Voices</CardTitle>
