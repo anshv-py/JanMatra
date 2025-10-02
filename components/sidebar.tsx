@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChartBar as BarChart3, FileText, TrendingUp, Settings, Chrome as Home, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface SidebarProps {
   activeView: string;
@@ -13,19 +13,43 @@ interface SidebarProps {
 
 export function Sidebar({ activeView, onViewChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [reportCount, setReportCount] = useState<number | null>(null);
+
+  // ✅ Fetch report count on mount
+  useEffect(() => {
+    const fetchReportCount = async () => {
+      try {
+        const res = await fetch('http://localhost:8000/sources/');
+        const data = await res.json();
+        const titles = data?.available_source_titles || [];
+        setReportCount(titles.length);
+      } catch (err) {
+        console.error("❌ Error fetching report count:", err);
+        setReportCount(null);
+      }
+    };
+
+    fetchReportCount();
+
+    // Optional: auto-refresh every 60s
+    const interval = setInterval(fetchReportCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: Home, badge: null },
-    { id: 'reports', label: 'Reports', icon: FileText, badge: '12' },
+    { id: 'reports', label: 'Reports', icon: FileText, badge: reportCount !== null ? reportCount.toString() : '...' },
     { id: 'analysis', label: 'Analysis', icon: TrendingUp, badge: null },
     { id: 'settings', label: 'Settings', icon: Settings, badge: null },
   ];
 
   return (
-    <div className={cn(
-      "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col",
-      collapsed ? "w-16" : "w-64"
-    )}>
+    <div
+      className={cn(
+        "bg-white border-r border-gray-200 transition-all duration-300 flex flex-col",
+        collapsed ? "w-16" : "w-64"
+      )}
+    >
       {/* Logo */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center justify-between">
@@ -48,11 +72,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
             onClick={() => setCollapsed(!collapsed)}
             className="h-8 w-8 p-0 hover:bg-gray-100"
           >
-            {collapsed ? (
-              <ChevronRight className="h-4 w-4" />
-            ) : (
-              <ChevronLeft className="h-4 w-4" />
-            )}
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
         </div>
       </div>
@@ -62,7 +82,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
-          
+
           return (
             <Button
               key={item.id}
@@ -92,9 +112,7 @@ export function Sidebar({ activeView, onViewChange }: SidebarProps) {
 
       {!collapsed && (
         <div className="p-4 border-t border-gray-200">
-          <div className="text-xs text-gray-500">
-            Version 1.0.0
-          </div>
+          <div className="text-xs text-gray-500">Version 1.0.0</div>
         </div>
       )}
     </div>
