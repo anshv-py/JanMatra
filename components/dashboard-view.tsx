@@ -28,7 +28,6 @@ export function DashboardView() {
   const fetchGlobalSentimentData = async () => {
     setLoadingSentiment(true);
     try {
-      // Fetch all source titles
       const sourcesRes = await fetch('http://localhost:8000/sources/');
       const sourcesData = await sourcesRes.json();
       const titles: string[] = sourcesData.available_source_titles || [];
@@ -44,8 +43,7 @@ export function DashboardView() {
 
         const records = data.records || [];
         for (const record of records) {
-          const individualResults = record?.individual_results || [];
-          
+          const individualResults = record?.sentiment_analysis?.individual_results || [];
           for (const result of individualResults) {
             if (result?.sentiment) {
               const sentiment = result.sentiment;
@@ -167,14 +165,14 @@ export function DashboardView() {
             {loadingSentiment ? (
               <Skeleton className="h-64 w-full" />
             ) : (
-              <div className="h-72 relative flex items-center justify-center">
+              <div className="h-72 relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={sentimentData}
                       dataKey="value"
                       cx="50%"
-                      cy="50%"
+                      cy="45%"
                       outerRadius={100}
                       innerRadius={60}
                       label={false}
@@ -196,13 +194,12 @@ export function DashboardView() {
                       )}
                     />
                   </PieChart>
-
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="text-center">
-                      <p className="text-3xl font-bold text-gray-900">{totalComments}</p>
-                    </div>
-                  </div>
                 </ResponsiveContainer>
+                <div className="absolute top-0 left-0 w-full h-full flex items-center justify-center pointer-events-none" style={{ paddingBottom: '72px' }}>
+                  <div className="text-center">
+                    <p className="text-3xl font-bold text-gray-900">{totalComments}</p>
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>

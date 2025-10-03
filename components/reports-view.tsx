@@ -1,16 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { 
   Search, 
-  Filter, 
   Download,
   FileText,
   TrendingUp,
@@ -25,6 +22,9 @@ import {
   Server
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
+ChartJS.register(ArcElement, Tooltip, Legend);
 
 type Report = {
   id: string;
@@ -57,8 +57,8 @@ export default function ReportsView() {
   const [generatingPDF, setGeneratingPDF] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [backendConnected, setBackendConnected] = useState(true);
+  const pdfRef = useRef<HTMLDivElement | null>(null);
 
-  // Check backend connection
   const checkBackendConnection = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/`, {
@@ -122,7 +122,7 @@ export default function ReportsView() {
       
       if (!response.ok) {
         if (response.status === 404) {
-          return null; // No records for this source
+          return null;
         }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -131,21 +131,23 @@ export default function ReportsView() {
       
       if (data.records && data.records.length > 0) {
         const record = data.records[0];
-        const sentiment = getDominantSentiment(record.sentiment_analysis?.percentages || {});
+        const sentiment = getDominantSentiment(record.sentiment_analysis?.distribution?.percentages || {});
         
-        return {
+        const reportData = {
           id: record._id,
           title: `Analysis Report - ${sourceTitle}`,
           sourceTitle: sourceTitle,
           date: new Date().toISOString().split('T')[0],
-          summary: record.summary || 'No summary available',
+          summary: record?.summary?.text || 'No summary available',
           type: 'Sentiment Analysis',
-          status: 'completed',
-          responses: record.sentiment_analysis?.total_comments || 0,
+          status: 'Completed',
+          responses: record.metadata?.total_comments || 0,
           sentiment: sentiment,
           sentimentData: record.sentiment_analysis,
-          wordcloudImage: record.wordcloud_base64 ? `data:image/png;base64,${record.wordcloud_base64}` : null
+          wordcloudImage: record.wordcloud?.image_base64 ? `data:image/png;base64,${record.wordcloud?.image_base64}` : null
         };
+        console.log("Report Data: ", reportData);
+        return reportData;
       }
       return null;
     } catch (err) {
@@ -153,9 +155,6 @@ export default function ReportsView() {
       return null;
     }
   };
-
-  // Fetch AI suggestions for a selected report
-  // Replace the fetchAISuggestions function in reports-view.tsx with this:
 
 const fetchAISuggestions = async (summary: string) => {
   if (!summary || summary.trim() === '' || summary === 'No summary available') {
@@ -178,13 +177,9 @@ const fetchAISuggestions = async (summary: string) => {
     }
     
     const text = await response.text();
-    
-    // Parse the suggestions from the response
-    // Split by numbered items (1., 2., 3., 4.) or by double newlines
     const lines = text
       .split(/(?:\r?\n){2,}|\d+\.\s+\*\*/)
       .map(l => {
-        // Remove leading numbers, asterisks, and extra whitespace
         return l
           .replace(/^\d+\.\s*/, '')
           .replace(/\*\*/g, '')
@@ -193,7 +188,6 @@ const fetchAISuggestions = async (summary: string) => {
           .trim();
       })
       .filter(line => {
-        // Filter out empty lines and header text
         return line.length > 20 && 
                !line.toLowerCase().includes('here are') &&
                !line.toLowerCase().includes('suggestions:') &&
@@ -213,19 +207,17 @@ const fetchAISuggestions = async (summary: string) => {
     setLoadingAISuggestions(false);
   }
 };
-  // Get dominant sentiment
   const getDominantSentiment = (percentages: any) => {
-    if (!percentages) return 'neutral';
+    if (!percentages) return 'Neutral';
     const entries = Object.entries(percentages);
-    if (entries.length === 0) return 'neutral';
+    if (entries.length === 0) return 'Neutral';
     
     const dominant = entries.reduce((max: any, current: any) => 
       current[1] > max[1] ? current : max
     );
-    return dominant[0].toLowerCase();
+    return dominant[0];
   };
 
-  // Load reports for all source titles
   const loadReports = async () => {
     if (sourceTitles.length === 0) return;
     setLoading(true);
@@ -281,6 +273,287 @@ const fetchAISuggestions = async (summary: string) => {
       loadReports();
     }
   }, [sourceTitles]);
+
+  const generatePDFReport = async (report: Report) => {
+    setGeneratingPDF(report.id);
+    try {
+      if (!aiSuggestions || aiSuggestions.length === 0) {
+        await fetchAISuggestions(report.summary);
+      }
+
+      const printable = document.createElement('div');
+      printable.style.width = '1240px';
+      printable.style.minHeight = '1754px';
+      printable.style.padding = '48px';
+      printable.style.boxSizing = 'border-box';
+      printable.style.fontFamily = 'Inter, Arial, sans-serif';
+      printable.style.background = 'white';
+      printable.style.color = '#111827';
+      printable.style.position = 'fixed';
+      printable.style.left = '-20000px';
+      printable.style.top = '0';
+
+      const watermark = document.createElement('div');
+      watermark.innerText = 'eVoterSaathi';
+      watermark.style.opacity = '0.06';
+      watermark.style.fontSize = '120px';
+      watermark.style.position = 'absolute';
+      watermark.style.left = '60px';
+      watermark.style.top = '220px';
+      watermark.style.transform = 'rotate(-30deg)';
+      watermark.style.pointerEvents = 'none';
+      printable.appendChild(watermark);
+
+      const header = document.createElement('div');
+      header.style.display = 'flex';
+      header.style.justifyContent = 'space-between';
+      header.style.alignItems = 'center';
+
+      const title = document.createElement('div');
+      title.innerHTML = `<h1 style="margin:0;font-size:28px;letter-spacing:-0.2px">${escapeHtml(report.title)}</h1><div style="font-size:12px;color:#6B7280;margin-top:6px">Source: ${escapeHtml(report.sourceTitle)}</div>`;
+      header.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.style.textAlign = 'right';
+      meta.innerHTML = `<div style="font-size:12px;color:#6B7280">${format(new Date(report.date), 'PPP')}</div><div style="margin-top:6px;font-weight:600">Responses: ${report.responses}</div>`;
+      header.appendChild(meta);
+      printable.appendChild(header);
+
+
+      // Divider
+      const hr = document.createElement('div');
+      hr.style.height = '1px';
+      hr.style.background = 'linear-gradient(90deg, rgba(0,0,0,0.06), rgba(0,0,0,0.02))';
+      hr.style.margin = '18px 0';
+      printable.appendChild(hr);
+
+
+      // Main body: left summary + AI insights, right wordcloud + sentiment bar
+      const body = document.createElement('div');
+      body.style.display = 'flex';
+      body.style.gap = '18px';
+
+
+      // Left column
+      const left = document.createElement('div');
+      left.style.flex = '1 1 60%';
+
+      const summaryCard = document.createElement('div');
+      summaryCard.style.padding = '14px';
+      summaryCard.style.borderRadius = '8px';
+      summaryCard.style.background = 'linear-gradient(180deg, #ffffff, #fbfbfd)';
+      summaryCard.style.boxShadow = '0 6px 18px rgba(15,23,42,0.06)';
+
+      const summaryTitle = document.createElement('div');
+      summaryTitle.innerHTML = `<div style="font-size:18px;color:#6B7280;font-weight:600;margin-bottom:8px">SUMMARY</div>`;
+      summaryCard.appendChild(summaryTitle);
+
+
+      const summaryText = document.createElement('div');
+      summaryText.style.fontSize = '15px';
+      summaryText.style.color = '#374151';
+      const trimmedSummary = truncate(report.summary || '', 300);
+      summaryText.innerText = trimmedSummary;
+      summaryCard.appendChild(summaryText);
+      left.appendChild(summaryCard);
+
+      const insightsCard = document.createElement('div');
+      insightsCard.style.padding = '14px';
+      insightsCard.style.borderRadius = '8px';
+      insightsCard.style.background = '#F8FAFF';
+      insightsCard.style.border = '1px solid rgba(59,130,246,0.06)';
+
+      const insightsTitle = document.createElement('div');
+      insightsTitle.innerHTML = `<div style="font-size:18px;color:#1E3A8A;font-weight:700;margin-bottom:8px">AI INSIGHTS (concise)</div>`;
+      insightsCard.appendChild(insightsTitle);
+
+      const insightsList = document.createElement('ol');
+      insightsList.style.margin = '0';
+      insightsList.style.padding = '0 0 0 18px';
+      insightsList.style.fontSize = '15px';
+      insightsList.style.color = '#0F172A';
+
+      const useSuggestions = (aiSuggestions && aiSuggestions.length > 0) ? aiSuggestions : ['No suggestions available'];
+      useSuggestions.slice(0, 4).forEach((s, i) => {
+        const li = document.createElement('li');
+        li.style.marginBottom = '6px';
+        li.innerText = s;
+        insightsList.appendChild(li);
+      });
+
+      insightsCard.appendChild(insightsList);
+      left.appendChild(insightsCard);
+      body.appendChild(left);
+
+      const right = document.createElement('div');
+      right.style.flex = '1 1 40%';
+      right.style.display = 'flex';
+      right.style.flexDirection = 'column';
+      right.style.gap = '12px';
+
+      const wcCard = document.createElement('div');
+      wcCard.style.padding = '10px';
+      wcCard.style.borderRadius = '8px';
+      wcCard.style.background = '#fff';
+      wcCard.style.boxShadow = '0 6px 12px rgba(15,23,42,0.04)';
+      wcCard.style.textAlign = 'center';
+
+      if (report.wordcloudImage) {
+        const img = document.createElement('img');
+        img.src = report.wordcloudImage;
+        img.style.maxWidth = '100%';
+        img.style.height = '200px';
+        img.style.objectFit = 'contain';
+        img.alt = 'wordcloud';
+        wcCard.appendChild(img);
+      } else {
+        const noImg = document.createElement('div');
+        noImg.innerText = 'Wordcloud not available';
+        noImg.style.color = '#6B7280';
+        noImg.style.padding = '28px 0';
+        wcCard.appendChild(noImg);
+      }
+      right.appendChild(wcCard);
+
+      const sentimentCard = document.createElement('div');
+      sentimentCard.style.padding = '12px';
+      sentimentCard.style.borderRadius = '8px';
+      sentimentCard.style.background = '#fff';
+      sentimentCard.style.boxShadow = '0 6px 12px rgba(15,23,42,0.04)';
+
+      const sentimentTitle = document.createElement('div');
+      sentimentTitle.style.fontSize = '12px';
+      sentimentTitle.style.color = '#111827';
+      sentimentTitle.style.fontWeight = '700';
+      sentimentTitle.style.marginBottom = '8px';
+      sentimentTitle.innerText = 'SENTIMENT BREAKDOWN';
+      sentimentCard.appendChild(sentimentTitle);
+
+      const percentages = (report.sentimentData && (report.sentimentData.percentages || report.sentimentData.distribution?.percentages)) || {};
+      const barContainer = document.createElement('div');
+      barContainer.style.display = 'flex';
+      barContainer.style.flexDirection = 'column';
+      barContainer.style.gap = '8px';
+
+      const labels = ['Positive', 'Neutral', 'Negative', 'Suggestive'];
+      labels.forEach((label) => {
+        const percent = percentages[label] !== undefined ? Number(percentages[label]) : 0;
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.justifyContent = 'space-between';
+        row.style.alignItems = 'center';
+
+        const lbl = document.createElement('div');
+        lbl.style.fontSize = '11px';
+        lbl.style.color = '#374151';
+        lbl.innerText = `${label}`;
+        row.appendChild(lbl);
+
+        const barWrap = document.createElement('div');
+        barWrap.style.flex = '1';
+        barWrap.style.marginLeft = '8px';
+        barWrap.style.marginRight = '8px';
+        barWrap.style.height = '10px';
+        barWrap.style.background = '#F3F4F6';
+        barWrap.style.borderRadius = '6px';
+        barWrap.style.overflow = 'hidden';
+
+        const bar = document.createElement('div');
+        bar.style.height = '100%';
+        bar.style.width = `${Math.max(1, Math.min(100, percent))}%`;
+        bar.style.background = getGradientForLabel(label);
+        barWrap.appendChild(bar);
+        row.appendChild(barWrap);
+
+        const pct = document.createElement('div');
+        pct.style.fontSize = '11px';
+        pct.style.color = '#374151';
+        pct.style.width = '46px';
+        pct.style.textAlign = 'right';
+        pct.innerText = `${percent}%`;
+        row.appendChild(pct);
+
+
+        barContainer.appendChild(row);
+      });
+
+      sentimentCard.appendChild(barContainer);
+      right.appendChild(sentimentCard);
+      body.appendChild(right);
+
+      printable.appendChild(body);
+
+      const footer = document.createElement('div');
+      footer.style.marginTop = '18px';
+      footer.style.fontSize = '10px';
+      footer.style.color = '#6B7280';
+      footer.innerText = 'Generated by JanMatra • Creative one-page summary • AI insights by Gemini';
+      printable.appendChild(footer);
+
+      document.body.appendChild(printable);
+
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import('html2canvas'),
+        import('jspdf')
+      ]);
+
+      const canvas = await html2canvas(printable as HTMLElement, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        logging: false
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = (pdf as any).getImageProperties(imgData);
+      const imgWidth = pageWidth;
+      const imgHeight = (imgProps.height * pageWidth) / imgProps.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, Math.min(imgHeight, pageHeight));
+
+      pdf.save(`${slugify(report.sourceTitle || report.title)}-report.pdf`);
+      document.body.removeChild(printable);
+
+    } catch (err) {
+        console.error('Error generating PDF:', err);
+        alert('Failed to generate PDF. Check console for details.');
+      } finally {
+        setGeneratingPDF(null);
+      }
+    };
+
+    function getGradientForLabel(label: string) {
+      switch (label.toLowerCase()) {
+      case 'positive': return 'linear-gradient(90deg,#34D399,#10B981)';
+      case 'negative': return 'linear-gradient(90deg,#FB7185,#EF4444)';
+      case 'neutral': return 'linear-gradient(90deg,#FBBF24,#F59E0B)';
+      case 'suggestive': return 'linear-gradient(90deg,#C084FC,#7C3AED)';
+      default: return 'linear-gradient(90deg,#CBD5E1,#94A3B8)';
+      }
+    }
+
+    function slugify(text: string) {
+      return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+
+    function truncate(text: string, maxWords: number) {
+      if (!text) return '';
+      const words = text.trim().split(/\s+/);
+      if (words.length <= maxWords) return text;
+      return words.slice(0, maxWords).join(' ') + '…';
+    }
+
+    function escapeHtml(unsafe: string) {
+      return unsafe
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    }
 
   if (loading) {
     return (
@@ -354,7 +627,6 @@ const fetchAISuggestions = async (summary: string) => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Reports</h1>
@@ -377,7 +649,6 @@ const fetchAISuggestions = async (summary: string) => {
         </div>
       </div>
 
-      {/* Search + Filters */}
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-row flex-wrap gap-4 items-center w-full">
@@ -393,8 +664,6 @@ const fetchAISuggestions = async (summary: string) => {
                 />
               </div>
             </div>
-
-            {/* Sort */}
             <div className="flex-1 min-w-[180px]">
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger>
@@ -411,14 +680,12 @@ const fetchAISuggestions = async (summary: string) => {
               </Select>
             </div>
 
-            {/* Sentiment Filter */}
             <div className="flex-1 min-w-[180px]">
               <Select value={selectedFilter} onValueChange={setSelectedFilter}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Sentiment" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Sentiment</SelectItem>
                   <SelectItem value="positive">Positive</SelectItem>
                   <SelectItem value="neutral">Neutral</SelectItem>
                   <SelectItem value="negative">Negative</SelectItem>
@@ -477,14 +744,13 @@ const fetchAISuggestions = async (summary: string) => {
                           {report.title}
                         </h3>
                         <Badge 
-                          variant={report.status === 'completed' ? 'default' : 'secondary'}
-                          className={report.status === 'completed' ? 'bg-green-100 text-green-800' : ''}
+                          variant={report.status === 'Completed' ? 'default' : 'secondary'}
+                          className={report.status === 'Completed' ? 'bg-green-100 text-green-800' : ''}
                         >
                           {report.status}
                         </Badge>
                       </div>
                       
-                      <p className="text-sm text-gray-500 mb-2">Source: {report.sourceTitle}</p>
                       <p className="text-gray-600 mb-3">
                         {report.summary.length > 150 
                           ? `${report.summary.substring(0, 150)}...` 
@@ -502,9 +768,9 @@ const fetchAISuggestions = async (summary: string) => {
                           {report.responses} responses
                         </div>
                         <div className="flex items-center gap-1">
-                          {report.sentiment === 'positive' && <TrendingUp className="h-4 w-4 text-green-600" />}
-                          {report.sentiment === 'negative' && <TrendingDown className="h-4 w-4 text-red-600" />}
-                          {(report.sentiment === 'neutral' || report.sentiment === 'suggestive') && <TrendingUp className="h-4 w-4 text-yellow-600" />}
+                          {report.sentiment === 'Positive' && <TrendingUp className="h-4 w-4 text-green-600" />}
+                          {report.sentiment === 'Negative' && <TrendingDown className="h-4 w-4 text-red-600" />}
+                          {(report.sentiment === 'Neutral' || report.sentiment === 'suggestive') && <TrendingUp className="h-4 w-4 text-yellow-600" />}
                           <span className="capitalize" style={{ color: getSentimentColor(report.sentiment) }}>
                             {report.sentiment}
                           </span>
@@ -517,22 +783,8 @@ const fetchAISuggestions = async (summary: string) => {
                         <Eye className="mr-2 h-4 w-4" />
                         View
                       </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // TODO: implement generatePDFReport here if needed
-                          console.log('Generate PDF for report:', report.id);
-                        }}
-                        disabled={generatingPDF === report.id}
-                      >
-                        {generatingPDF === report.id ? (
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="mr-2 h-4 w-4" />
-                        )}
-                        PDF
+                      <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); generatePDFReport(report); }} disabled={generatingPDF === report.id}>
+                        {generatingPDF === report.id ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}PDF
                       </Button>
                     </div>
                   </div>
@@ -572,11 +824,13 @@ const fetchAISuggestions = async (summary: string) => {
                           <p className="text-sm font-medium text-gray-700">{selectedReport.sourceTitle}</p>
                         </div>
                       )}
-                      {aiSuggestions.map((suggestion, index) => (
+                      {aiSuggestions.map((suggestion: string | { text: string }, index) => (
                         <div key={index} className="p-3 bg-purple-50 rounded-lg border-l-2 border-purple-200">
                           <div className="flex items-start gap-2">
                             <span className="text-purple-600 font-medium text-sm">{index + 1}.</span>
-                            <p className="text-sm text-gray-700 flex-1">{suggestion}</p>
+                            <p className="text-sm text-gray-700 flex-1">
+                              {typeof suggestion === 'string' ? suggestion : suggestion.text}
+                            </p>
                           </div>
                         </div>
                       ))}
@@ -595,7 +849,6 @@ const fetchAISuggestions = async (summary: string) => {
               </div>
             </CardContent>
           </Card>
-
           {/* Quick Stats */}
           <Card>
             <CardHeader>

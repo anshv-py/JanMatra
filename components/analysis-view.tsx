@@ -43,7 +43,7 @@ export function AnalysisView() {
       const response = await fetch(`http://localhost:8000/records/${encodeURIComponent(title)}`);
       const result = await response.json();
 
-      const data = result.records && result.records.length > 0 ? result.records[0] : null;
+      const data = result.records[0] && result.records.length > 0 ? result.records[0] : null;
       if (!data) {
         setError('No records found for this source');
         setLoading(false);
@@ -51,22 +51,22 @@ export function AnalysisView() {
       }
 
       // Process sentiment data
-      const processedSentimentData = Object.entries(data.sentiment_analysis.percentages).map(
+      const processedSentimentData = Object.entries(data.sentiment_analysis?.distribution?.percentages).map(
         ([category, percentage]) => ({
           category,
           value: percentage,
-          count: data.sentiment_analysis.counts[category],
+          count: data.sentiment_analysis?.distribution?.counts[category],
           color: getSentimentColor(category),
         })
       );
 
       setSentimentData(processedSentimentData);
-      setSummary(data.summary);
+      setSummary(data?.summary?.text);
       setSourceTitle(data.SourceTitle);
-      setTotalComments(data.sentiment_analysis.total_comments);
+      setTotalComments(data.metadata?.total_comments);
       setIndividualResults(data.individual_results);
-      if (data.wordcloud_base64) {
-        setWordcloudImage(`data:image/png;base64,${data.wordcloud_base64}`);
+      if (data.wordcloud?.image_base64) {
+        setWordcloudImage(`data:image/png;base64,${data.wordcloud?.image_base64}`);
       }
       setError('');
     } catch (err) {
@@ -300,7 +300,6 @@ export function AnalysisView() {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-gray-900">{totalComments}</div>
-                    <div className="text-sm text-gray-600">Total</div>
                   </div>
                 </div>
               </div>
@@ -322,7 +321,7 @@ export function AnalysisView() {
         {/* Word Cloud */}
         <Card>
           <CardHeader>
-            <CardTitle>Key Themes & Topics</CardTitle>
+            <CardTitle>WordCloud</CardTitle>
             <CardDescription>
               Most frequently mentioned topics in feedback
             </CardDescription>
